@@ -181,11 +181,11 @@ impl Evm {
 
 const STATE: &str = "State failure.";
 
-impl<'a> ethabi::Caller for &'a mut Evm {
-    type CallOut = Result<ethabi::Bytes, String>;
-    type TransactOut = Result<ethabi::Bytes, String>;
+impl Evm {
+//    type CallOut = Result<ethabi::Bytes, String>;
+//    type TransactOut = Result<ethabi::Bytes, String>;
 
-    fn call(self, bytes: ethabi::Bytes) -> Self::CallOut {
+    pub fn call(&mut self, bytes: ethabi::Bytes) -> Result<ethabi::Bytes, String> {
         let contract_address = self.contract_address
             .expect("Contract address is not set. Did you forget to deploy the contract?");
         let mut params = vm::ActionParams::default();
@@ -215,7 +215,7 @@ impl<'a> ethabi::Caller for &'a mut Evm {
         }
     }
 
-    fn transact(self, bytes: ethabi::Bytes) -> Self::TransactOut {
+    pub fn transact(&mut self, bytes: ethabi::Bytes) -> Result<ethabi::Bytes, String> {
         let contract_address = self.contract_address
             .expect("Contract address is not set. Did you forget to deploy the contract?");
         let env_info = self.env_info();

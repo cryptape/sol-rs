@@ -7,7 +7,6 @@ extern crate ethereum_types as types;
 extern crate rustc_hex;
 extern crate solaris;
 
-
 fn main() {
     solaris::main(include_bytes!("../res/BadgeReg_sol_BadgeReg.abi"));
 }
@@ -29,12 +28,12 @@ fn setup() -> (solaris::evm::Evm, badgereg::BadgeReg) {
 #[cfg(test)]
 use rustc_hex::FromHex;
 #[cfg(test)]
-use solaris::wei;
-#[cfg(test)]
 use solaris::convert;
+#[cfg(test)]
+use solaris::wei;
 
 #[cfg(test)]
-use solaris::{U256, Address};
+use solaris::{Address, U256};
 
 #[test]
 fn badge_reg_test_fee() {
@@ -42,55 +41,70 @@ fn badge_reg_test_fee() {
     let reg = contract.functions();
 
     // Initial fee is 1 ETH
-    assert_eq!(U256::from(reg.fee().call(&mut evm).unwrap()), wei::from_ether(1));
+    //    assert_eq!(U256::from(reg.fee().call(&|b| evm.call(b)).unwrap()), wei::from_ether(1));
+    let output = evm.call(reg.fee().input()).unwrap();
+    assert_eq!(
+        U256::from(reg.fee().output(&output).unwrap()),
+        wei::from_ether(1)
+    );
 
     // The owner should be able to set the fee
-    reg.set_fee().transact(wei::from_gwei(10), &mut evm).unwrap();
+    evm.call(reg.set_fee().input(wei::from_gwei(10))).unwrap();
 
     // Fee should be updated
-    assert_eq!(U256::from(reg.fee().call(&mut evm).unwrap()), wei::from_gwei(10));
+    let output = evm.call(reg.fee().input()).unwrap();
+    assert_eq!(
+        U256::from(reg.fee().output(&output).unwrap()),
+        wei::from_gwei(10)
+    );
 
     // Other address should not be allowed to change the fee
     evm.with_sender(10.into());
-    reg.set_fee().transact(wei::from_gwei(10), &mut evm).unwrap_err();
+    evm.transact(reg.set_fee().input(wei::from_gwei(10)))
+        .unwrap_err();
 }
 
 #[test]
 fn anyone_should_be_able_to_register_a_badge() {
-    let (evm, contract) = setup();
+    let (mut evm, contract) = setup();
     let reg = contract.functions();
 
-    evm.run(move |mut evm| {
-        // Register new entry
-        reg.register().transact(Address::from(10), convert::bytes32("test"),
-        evm
-        .with_value(wei::from_ether(2))
+    //    evm.run(move |mut evm| {
+    // Register new entry
+    evm.with_value(wei::from_ether(2))
         .with_sender(5.into())
         .ensure_funds()
-        )?;
+        .transact(
+            reg.register()
+                .input(Address::from(10), types::H256(convert::bytes32("test"))),
+        )
+        .unwrap();
 
-        // TODO [ToDr] The API here is crap, we need to work on sth better.
-        // Check that the event has been fired.
-        assert_eq!(
-            evm.logs(badgereg::events::Registered::default().create_filter(
-                    convert::bytes32("test"),
-                    ethabi::Topic::Any,
-                    )).len(),
-                    1
-                  );
+    // TODO [ToDr] The API here is crap, we need to work on sth better.
+    // Check that the event has been fired.
+    assert_eq!(
+        evm.logs(
+            badgereg::events::Registered::default()
+                .create_filter(types::H256(convert::bytes32("test")), ethabi::Topic::Any,)
+        ).len(),
+        1
+    );
 
-        // TODO [ToDr] Perhaps `with_` should not be persistent?
-        evm.with_value(0.into());
-        // Test that it was registered correctly
-        assert_eq!(
-            reg.from_name().call(convert::bytes32("test"), &mut evm)?,
-            (
-                U256::from(0).into(),
-                Address::from(10).into(),
-                Address::from(5).into()
-            )
-        );
+    // TODO [ToDr] Perhaps `with_` should not be persistent?
+    evm.with_value(0.into());
+    let output = evm
+        .call(reg.from_name().input(convert::bytes32("test")))
+        .unwrap();
 
-        Ok(())
-    })
+    assert_eq!(
+        reg.from_name().output(&output).unwrap(),
+        (
+            U256::from(0).into(),
+            Address::from(10).into(),
+            Address::from(5).into()
+        )
+    );
+
+    //        Ok(())
+    //    })
 }
